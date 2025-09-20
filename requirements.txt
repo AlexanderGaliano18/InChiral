@@ -1,1 +1,6 @@
-
+streamlit
+pandas
+numpy
+matplotlib
+rdkit-pypi   # Para trabajar con moléculas
+py3Dmol      # Para visualizar moléculas 3D
