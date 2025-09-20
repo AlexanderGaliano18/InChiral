@@ -14,3 +14,10 @@ La **quiralidad** es una propiedad geométrica de ciertas moléculas en las que 
 Esto da lugar a moléculas llamadas **enantiómeros**, que pueden tener propiedades químicas similares pero efectos biológicos muy diferentes. Un ejemplo histórico es el caso de la **talidomida**.
 
 ## 📂 Estructura del proyecto
+│── README.md
+│── LICENSE
+│── requirements.txt
+│── app.py
+│── images/ # Diagramas y ejemplos de moléculas
+│── models/ # Algoritmos o scripts para detección de quiralidad
+│── examples/ # Ejemplos de estructuras quirales y aquirales
