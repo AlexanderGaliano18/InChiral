@@ -2,7 +2,8 @@ import streamlit as st
 import itertools
 import os
 import zipfile
-import subprocess
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
 # ----------------------------
 # Función: Generar estereoisómeros
@@ -39,6 +40,24 @@ def generar_estereoisomeros(smiles: str):
 
 
 # ----------------------------
+# Función: Convertir SMILES a XYZ con RDKit
+# ----------------------------
+def smiles_a_xyz(smiles, filename):
+    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.AddHs(mol)  # Añadir hidrógenos
+    AllChem.EmbedMolecule(mol, AllChem.ETKDG())  # Generar 3D
+    AllChem.UFFOptimizeMolecule(mol)  # Optimización geometría
+
+    conf = mol.GetConformer()
+    with open(filename, "w") as f:
+        f.write(f"{mol.GetNumAtoms()}\n")
+        f.write(f"{smiles}\n")
+        for atom in mol.GetAtoms():
+            pos = conf.GetAtomPosition(atom.GetIdx())
+            f.write(f"{atom.GetSymbol()} {pos.x:.4f} {pos.y:.4f} {pos.z:.4f}\n")
+
+
+# ----------------------------
 # Interfaz Streamlit
 # ----------------------------
 st.set_page_config(page_title="InChiral", page_icon="🧬", layout="centered")
@@ -54,36 +73,23 @@ if st.button("Generar"):
         isomeros = generar_estereoisomeros(smiles)
         st.success(f"✅ Total estereoisómeros generados: {len(isomeros)}")
 
-        # Mostrar algunos ejemplos
         st.write("Ejemplos generados:")
         st.code("\n".join(isomeros[:5]))
-
-        # Guardar archivo .smi
-        filename = "archivo.smi"
-        with open(filename, "w") as f:
-            for s in isomeros:
-                f.write(s + "\n")
 
         # Carpeta de salida
         output_folder = "xyz_files"
         os.makedirs(output_folder, exist_ok=True)
 
-        # Ejecutar OpenBabel con subprocess
-        try:
-            subprocess.run(
-                ["obabel", filename, "-O", f"{output_folder}/isomero.xyz", "--gen3D", "-m"],
-                check=True
-            )
-        except Exception as e:
-            st.error("❌ Error ejecutando OpenBabel. Asegúrate de que esté instalado.")
-            st.exception(e)
-        else:
-            # Comprimir resultados
-            zip_name = "xyz_results.zip"
-            with zipfile.ZipFile(zip_name, "w") as zipf:
-                for file in os.listdir(output_folder):
-                    zipf.write(os.path.join(output_folder, file), file)
+        # Crear .xyz para cada isómero
+        for idx, s in enumerate(isomeros):
+            smiles_a_xyz(s, os.path.join(output_folder, f"isomero_{idx+1}.xyz"))
 
-            # Botón de descarga
-            with open(zip_name, "rb") as f:
-                st.download_button("📦 Descargar ZIP con isómeros", f, file_name=zip_name)
+        # Comprimir resultados
+        zip_name = "xyz_results.zip"
+        with zipfile.ZipFile(zip_name, "w") as zipf:
+            for file in os.listdir(output_folder):
+                zipf.write(os.path.join(output_folder, file), file)
+
+        # Botón de descarga
+        with open(zip_name, "rb") as f:
+            st.download_button("📦 Descargar ZIP con isómeros", f, file_name=zip_name)
