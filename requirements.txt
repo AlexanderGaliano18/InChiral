@@ -2,4 +2,3 @@ streamlit
 matplotlib
 pubchempy
 py3Dmol
-rdkit-pypi
