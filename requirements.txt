@@ -3,8 +3,8 @@ matplotlib
 pubchempy
 py3Dmol
 faerun_notebook
-ipyspeck(==0.6.1)
-ipywidgets(==7.6.3)
+ipyspeck==0.6.1
+ipywidgets==7.6.3
 ipython_genutils
 stmol==0.0.7
-rdkit
+rdkit-pypi
