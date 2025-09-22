@@ -1,32 +1,27 @@
+import streamlit as st
+import itertools
 import os
 import zipfile
-import itertools
-from google.colab import files
+import subprocess
 
+# ----------------------------
+# Función: Generar estereoisómeros
+# ----------------------------
 def generar_estereoisomeros(smiles: str):
     posiciones = []
     i = 0
     while i < len(smiles):
         if smiles[i] == "@":
             if i + 1 < len(smiles) and smiles[i+1] == "@":
-                posiciones.append((i, True))  # ya es @@
+                posiciones.append((i, True))  # @@
                 i += 2
             else:
-                posiciones.append((i, False)) # es @ simple
+                posiciones.append((i, False)) # @
                 i += 1
         else:
             i += 1
 
-    n = len(posiciones)
-    print(f"🔎 Se encontraron {n} centros quirales (@).")
-
-    # Verificación: solo aceptar exactamente 3
-    if n > 3:
-        print("❌ El SMILES tiene más de 3 centros quirales. No se generarán isómeros.")
-        return []
-
-    combinaciones = list(itertools.product(["@", "@@"], repeat=n))
-
+    combinaciones = list(itertools.product(["@", "@@"], repeat=len(posiciones)))
     resultados = []
     for comb in combinaciones:
         chars = list(smiles)
@@ -40,106 +35,55 @@ def generar_estereoisomeros(smiles: str):
                 chars[real_pos:real_pos+1] = list(val)
                 offset += len(val) - 1
         resultados.append("".join(chars))
-
     return resultados
 
 
-# -------------------
-# INTERACTIVO
-# -------------------
-smiles = input("👉 Ingresa el código SMILES: ")
+# ----------------------------
+# Interfaz Streamlit
+# ----------------------------
+st.set_page_config(page_title="InChiral", page_icon="🧬", layout="centered")
+st.title("🧬 Generador de Estereoisómeros - InChiral")
 
-isomeros = generar_estereoisomeros(smiles)
+smiles = st.text_input("👉 Ingresa el código SMILES:")
 
-if isomeros:
-    print(f"\n✅ Total estereoisómeros generados: {len(isomeros)}")
-    print("Ejemplos:")
-    for s in isomeros[:5]:
-        print(s)
+if st.button("Generar"):
+    if smiles.strip() == "":
+        st.error("⚠️ Debes ingresar un SMILES válido.")
+    else:
+        # Generar isómeros
+        isomeros = generar_estereoisomeros(smiles)
+        st.success(f"✅ Total estereoisómeros generados: {len(isomeros)}")
 
+        # Mostrar algunos ejemplos
+        st.write("Ejemplos generados:")
+        st.code("\n".join(isomeros[:5]))
 
-def generar_estereoisomeros(smiles: str):
-    posiciones = []
-    i = 0
-    while i < len(smiles):
-        if smiles[i] == "@":
-            if i + 1 < len(smiles) and smiles[i+1] == "@":
-                posiciones.append((i, True))  # ya es @@
-                i += 2
-            else:
-                posiciones.append((i, False)) # es @ simple
-                i += 1
+        # Guardar archivo .smi
+        filename = "archivo.smi"
+        with open(filename, "w") as f:
+            for s in isomeros:
+                f.write(s + "\n")
+
+        # Carpeta de salida
+        output_folder = "xyz_files"
+        os.makedirs(output_folder, exist_ok=True)
+
+        # Ejecutar OpenBabel con subprocess
+        try:
+            subprocess.run(
+                ["obabel", filename, "-O", f"{output_folder}/isomero.xyz", "--gen3D", "-m"],
+                check=True
+            )
+        except Exception as e:
+            st.error("❌ Error ejecutando OpenBabel. Asegúrate de que esté instalado.")
+            st.exception(e)
         else:
-            i += 1
+            # Comprimir resultados
+            zip_name = "xyz_results.zip"
+            with zipfile.ZipFile(zip_name, "w") as zipf:
+                for file in os.listdir(output_folder):
+                    zipf.write(os.path.join(output_folder, file), file)
 
-    n = len(posiciones)
-    print(f"🔎 Se encontraron {n} centros quirales (@).")
-
-    combinaciones = list(itertools.product(["@", "@@"], repeat=n))
-
-    resultados = []
-    for comb in combinaciones:
-        chars = list(smiles)
-        offset = 0
-        for (pos, era_doble), val in zip(posiciones, comb):
-            real_pos = pos + offset
-            if era_doble:
-                chars[real_pos:real_pos+2] = list(val)
-                offset += len(val) - 2
-            else:
-                chars[real_pos:real_pos+1] = list(val)
-                offset += len(val) - 1
-        resultados.append("".join(chars))
-
-    return resultados
-
-
-# -------------------
-# INTERACTIVO
-# -------------------
-smiles = input("👉 Ingresa el código SMILES: ")
-
-isomeros = generar_estereoisomeros(smiles)
-
-print(f"\n✅ Total estereoisómeros generados: {len(isomeros)}")
-print("Ejemplos:")
-for s in isomeros[:5]:
-    print(s)
-
-# Guardar archivo
-filename = "archivo.smi"
-with open(filename, "w") as f:
-    for s in isomeros:
-        f.write(s + "\n")
-
-print(f"\n📁 Archivo '{filename}' guardado con éxito.")
-
-# Descargar archivo en Colab
-files.download(filename)
-
-
-
-
-# Subir archivo.smi desde tu PC
-uploaded = files.upload()  # Selecciona "archivo.smi"
-
-input_file = "archivo.smi"
-output_folder = "xyz_files"
-zip_name = "xyz_results.zip"
-
-# Crear carpeta de salida
-os.makedirs(output_folder, exist_ok=True)
-
-# Generar un archivo .xyz por cada SMILES usando OpenBabel
-# -m = múltiple salida (un archivo por molécula)
-!obabel {input_file} -O {output_folder}/isomero.xyz --gen3D -m
-
-# Comprimir los XYZ en un ZIP
-with zipfile.ZipFile(zip_name, "w") as zipf:
-    for file in os.listdir(output_folder):
-        zipf.write(os.path.join(output_folder, file), file)
-
-# Descargar el ZIP
-files.download(zip_name)
-
-print(f"\n📦 Archivo '{zip_name}' generado con éxito y listo para descargar.")
+            # Botón de descarga
+            with open(zip_name, "rb") as f:
+                st.download_button("📦 Descargar ZIP con isómeros", f, file_name=zip_name)
