@@ -1,0 +1,10 @@
+name: inchiral
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - rdkit
+  - pip
+  - pip:
+      - streamlit
+      - py3Dmol
