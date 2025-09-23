@@ -1,1 +1,3 @@
-openbabel
+libxrender1
+libxext6
+libsm6
