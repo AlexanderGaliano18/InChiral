@@ -4,8 +4,21 @@ import os
 import zipfile
 import tempfile
 import io
-from rdkit import Chem
-from rdkit.Chem import AllChem
+import sys
+
+# Configuración para evitar warnings de RDKit
+import warnings
+warnings.filterwarnings('ignore')
+
+# Manejo de importación de RDKit
+try:
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+    RDKIT_AVAILABLE = True
+except ImportError:
+    st.error("❌ RDKit no está instalado. Por favor instala RDKit para usar la funcionalidad de conversión a XYZ.")
+    st.info("Instala con: pip install rdkit")
+    RDKIT_AVAILABLE = False
 
 def generar_estereoisomeros(smiles: str):
     """
@@ -57,38 +70,51 @@ def smiles_to_xyz(smiles, mol_id):
     """
     Convierte un SMILES a formato XYZ y retorna el contenido como string
     """
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return None, f"❌ Error: SMILES inválido {smiles}"
+    if not RDKIT_AVAILABLE:
+        return None, "❌ RDKit no está disponible"
     
-    # Agregar hidrógenos
-    mol = Chem.AddHs(mol)
-    
-    # Generar geometría inicial con ETKDG
-    params = AllChem.ETKDGv3()
-    params.randomSeed = 42  # reproducible
-    
-    if AllChem.EmbedMolecule(mol, params) != 0:
-        return None, f"⚠️ No se pudo generar conformación 3D para {smiles}"
-    
-    # Optimizar con MMFF94 (si está disponible)
     try:
-        if AllChem.MMFFHasAllMoleculeParams(mol):
-            AllChem.MMFFOptimizeMolecule(mol)
-        else:
-            AllChem.UFFOptimizeMolecule(mol)
-    except:
-        pass  # Si falla la optimización, continuar con la estructura no optimizada
-    
-    # Crear contenido XYZ
-    conf = mol.GetConformer()
-    xyz_content = f"{mol.GetNumAtoms()}\n{smiles}\n"
-    
-    for atom in mol.GetAtoms():
-        pos = conf.GetAtomPosition(atom.GetIdx())
-        xyz_content += f"{atom.GetSymbol()} {pos.x:.4f} {pos.y:.4f} {pos.z:.4f}\n"
-    
-    return xyz_content, f"✅ Molécula {mol_id} procesada correctamente"
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return None, f"❌ Error: SMILES inválido {smiles}"
+        
+        # Agregar hidrógenos
+        mol = Chem.AddHs(mol)
+        
+        # Generar geometría inicial con ETKDG
+        params = AllChem.ETKDGv3()
+        params.randomSeed = 42  # reproducible
+        
+        embed_result = AllChem.EmbedMolecule(mol, params)
+        if embed_result != 0:
+            # Intentar con parámetros más flexibles
+            params.useRandomCoords = True
+            embed_result = AllChem.EmbedMolecule(mol, params)
+            if embed_result != 0:
+                return None, f"⚠️ No se pudo generar conformación 3D para {smiles}"
+        
+        # Optimizar con MMFF94 (si está disponible)
+        try:
+            if AllChem.MMFFHasAllMoleculeParams(mol):
+                AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+            else:
+                AllChem.UFFOptimizeMolecule(mol, maxIters=500)
+        except Exception as opt_error:
+            # Si falla la optimización, continuar con la estructura no optimizada
+            pass
+        
+        # Crear contenido XYZ
+        conf = mol.GetConformer()
+        xyz_content = f"{mol.GetNumAtoms()}\n{smiles}\n"
+        
+        for atom in mol.GetAtoms():
+            pos = conf.GetAtomPosition(atom.GetIdx())
+            xyz_content += f"{atom.GetSymbol()} {pos.x:.4f} {pos.y:.4f} {pos.z:.4f}\n"
+        
+        return xyz_content, f"✅ Molécula {mol_id} procesada correctamente"
+        
+    except Exception as e:
+        return None, f"❌ Error procesando {smiles}: {str(e)}"
 
 def crear_archivo_zip(archivos_xyz):
     """
@@ -176,58 +202,63 @@ def main():
             
             with tab3:
                 st.markdown("**🧪 Conversión a formato XYZ**")
-                st.info("⚠️ La conversión a XYZ puede tardar unos segundos por molécula")
                 
-                if st.button("🚀 Convertir todos a XYZ", type="primary"):
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+                if not RDKIT_AVAILABLE:
+                    st.error("❌ RDKit no está instalado. No se puede convertir a XYZ.")
+                    st.info("Para instalar RDKit, usa: `pip install rdkit` o `conda install -c conda-forge rdkit`")
+                else:
+                    st.info("⚠️ La conversión a XYZ puede tardar unos segundos por molécula")
                     
-                    archivos_xyz = {}
-                    mensajes_log = []
-                    
-                    for i, smiles in enumerate(isomeros):
-                        progress = (i + 1) / len(isomeros)
-                        progress_bar.progress(progress)
-                        status_text.text(f"Procesando molécula {i+1}/{len(isomeros)}: {smiles}")
+                    if st.button("🚀 Convertir todos a XYZ", type="primary"):
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
                         
-                        xyz_content, mensaje = smiles_to_xyz(smiles, i+1)
-                        mensajes_log.append(mensaje)
+                        archivos_xyz = {}
+                        mensajes_log = []
                         
-                        if xyz_content:
-                            archivos_xyz[f"mol_{i+1}.xyz"] = xyz_content
-                    
-                    progress_bar.progress(1.0)
-                    status_text.text("✅ Proceso completado!")
-                    
-                    # Mostrar log de procesamiento
-                    with st.expander("📋 Log de procesamiento"):
-                        for mensaje in mensajes_log:
-                            if "❌" in mensaje or "⚠️" in mensaje:
-                                st.error(mensaje)
-                            else:
-                                st.success(mensaje)
-                    
-                    if archivos_xyz:
-                        # Crear archivo ZIP
-                        zip_data = crear_archivo_zip(archivos_xyz)
+                        for i, smiles in enumerate(isomeros):
+                            progress = (i + 1) / len(isomeros)
+                            progress_bar.progress(progress)
+                            status_text.text(f"Procesando molécula {i+1}/{len(isomeros)}: {smiles}")
+                            
+                            xyz_content, mensaje = smiles_to_xyz(smiles, i+1)
+                            mensajes_log.append(mensaje)
+                            
+                            if xyz_content:
+                                archivos_xyz[f"mol_{i+1}.xyz"] = xyz_content
                         
-                        st.success(f"✅ {len(archivos_xyz)} archivos XYZ generados correctamente")
+                        progress_bar.progress(1.0)
+                        status_text.text("✅ Proceso completado!")
                         
-                        st.download_button(
-                            label="📦 Descargar archivos XYZ (ZIP)",
-                            data=zip_data,
-                            file_name="estereoisomeros_xyz.zip",
-                            mime="application/zip",
-                            help="Descarga todos los archivos XYZ comprimidos en un ZIP"
-                        )
+                        # Mostrar log de procesamiento
+                        with st.expander("📋 Log de procesamiento"):
+                            for mensaje in mensajes_log:
+                                if "❌" in mensaje or "⚠️" in mensaje:
+                                    st.error(mensaje)
+                                else:
+                                    st.success(mensaje)
                         
-                        # Mostrar preview de un archivo XYZ
-                        if len(archivos_xyz) > 0:
-                            with st.expander("👀 Vista previa del primer archivo XYZ"):
-                                primer_archivo = list(archivos_xyz.values())[0]
-                                st.code(primer_archivo, language=None)
-                    else:
-                        st.error("❌ No se pudieron generar archivos XYZ")
+                        if archivos_xyz:
+                            # Crear archivo ZIP
+                            zip_data = crear_archivo_zip(archivos_xyz)
+                            
+                            st.success(f"✅ {len(archivos_xyz)} archivos XYZ generados correctamente")
+                            
+                            st.download_button(
+                                label="📦 Descargar archivos XYZ (ZIP)",
+                                data=zip_data,
+                                file_name="estereoisomeros_xyz.zip",
+                                mime="application/zip",
+                                help="Descarga todos los archivos XYZ comprimidos en un ZIP"
+                            )
+                            
+                            # Mostrar preview de un archivo XYZ
+                            if len(archivos_xyz) > 0:
+                                with st.expander("👀 Vista previa del primer archivo XYZ"):
+                                    primer_archivo = list(archivos_xyz.values())[0]
+                                    st.code(primer_archivo, language=None)
+                        else:
+                            st.error("❌ No se pudieron generar archivos XYZ")
     
     # Footer
     st.markdown("---")
