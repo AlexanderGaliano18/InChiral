@@ -17,11 +17,15 @@ def generar_estereoisomeros(smiles: str):
     n = len(posiciones)
     print(f"🔎 Se encontraron {n} centros quirales (@).")
 
-    # Verificación: solo aceptar exactamente 3
-    if n > 3:
+    # Verificación: aceptar 1, 2 o 3; rechazar > 3
+    if n == 0:
+        print("⚠️ El SMILES no tiene centros quirales. No se generarán isómeros.")
+        return []
+    elif n > 3:
         print("❌ El SMILES tiene más de 3 centros quirales. No se generarán isómeros.")
         return []
 
+    # Generar todas las combinaciones posibles
     combinaciones = list(itertools.product(["@", "@@"], repeat=n))
 
     resultados = []
