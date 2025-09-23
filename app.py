@@ -1,31 +1,31 @@
-import itertools
 import streamlit as st
+import itertools
 from rdkit import Chem
 from rdkit.Chem import AllChem
-import os, zipfile
-from io import BytesIO
 import py3Dmol
+import zipfile
+import os
 
-# ========================
-# 1. Generador de estereoisómeros
-# ========================
+# -------------------
+# 1. Generar estereoisómeros
+# -------------------
 def generar_estereoisomeros(smiles: str):
     posiciones = []
     i = 0
     while i < len(smiles):
         if smiles[i] == "@":
             if i + 1 < len(smiles) and smiles[i+1] == "@":
-                posiciones.append((i, True))  # ya es @@
+                posiciones.append((i, True))  # @@
                 i += 2
             else:
-                posiciones.append((i, False)) # es @ simple
+                posiciones.append((i, False)) # @
                 i += 1
         else:
             i += 1
 
     n = len(posiciones)
     if n == 0:
-        return [], "⚠️ El SMILES no tiene centros quirales. No se generarán isómeros."
+        return [], "⚠️ El SMILES no tiene centros quirales."
     elif n > 3:
         return [], "❌ El SMILES tiene más de 3 centros quirales. No se generarán isómeros."
 
@@ -45,21 +45,22 @@ def generar_estereoisomeros(smiles: str):
                 offset += len(val) - 1
         resultados.append("".join(chars))
 
-    return resultados, f"✅ Total estereoisómeros generados: {len(resultados)}"
+    return resultados, f"✅ Se generaron {len(resultados)} estereoisómeros."
 
-# ========================
-# 2. SMILES → XYZ con RDKit
-# ========================
-def smiles_to_xyz(smiles):
+
+# -------------------
+# 2. SMILES → XYZ
+# -------------------
+def smiles_to_xyz(smiles, filename):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        return None
+        return False
 
     mol = Chem.AddHs(mol)
     params = AllChem.ETKDGv3()
     params.randomSeed = 42
     if AllChem.EmbedMolecule(mol, params) != 0:
-        return None
+        return False
 
     if AllChem.MMFFHasAllMoleculeParams(mol):
         AllChem.MMFFOptimizeMolecule(mol)
@@ -67,60 +68,68 @@ def smiles_to_xyz(smiles):
         AllChem.UFFOptimizeMolecule(mol)
 
     conf = mol.GetConformer()
-    content = f"{mol.GetNumAtoms()}\n{smiles}\n"
-    for atom in mol.GetAtoms():
-        pos = conf.GetAtomPosition(atom.GetIdx())
-        content += f"{atom.GetSymbol()} {pos.x:.4f} {pos.y:.4f} {pos.z:.4f}\n"
-    return content, mol
+    with open(filename, "w") as f:
+        f.write(f"{mol.GetNumAtoms()}\n{smiles}\n")
+        for atom in mol.GetAtoms():
+            pos = conf.GetAtomPosition(atom.GetIdx())
+            f.write(f"{atom.GetSymbol()} {pos.x:.4f} {pos.y:.4f} {pos.z:.4f}\n")
+    return True
 
-# ========================
+
+# -------------------
 # 3. Visualización 3D con py3Dmol
-# ========================
-def mostrar_molecula(mol):
+# -------------------
+def visualizar_3d(smiles):
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    mol = Chem.AddHs(mol)
+    AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+    AllChem.UFFOptimizeMolecule(mol)
     block = Chem.MolToMolBlock(mol)
-    viewer = py3Dmol.view(width=400, height=400)
+
+    viewer = py3Dmol.view(width=400, height=300)
     viewer.addModel(block, "mol")
     viewer.setStyle({"stick": {}})
     viewer.zoomTo()
     return viewer
 
-# ========================
-# 4. Streamlit App
-# ========================
-st.title("🧪 Generador de estereoisómeros y visualizador 3D")
 
-smiles = st.text_input("👉 Ingresa un código SMILES:")
+# -------------------
+# 4. Interfaz Streamlit
+# -------------------
+st.title("🧪 Generador de Estereoisómeros y Visualización 3D")
+st.write("Ingresa un **código SMILES** para generar estereoisómeros y descargarlos en formato XYZ.")
+
+smiles_input = st.text_input("👉 Ingresa el SMILES:", "CC(C)Br")
 
 if st.button("Generar"):
-    if not smiles.strip():
-        st.warning("Por favor, ingresa un SMILES válido.")
-    else:
-        isomeros, msg = generar_estereoisomeros(smiles)
-        st.info(msg)
+    isomeros, mensaje = generar_estereoisomeros(smiles_input)
+    st.info(mensaje)
 
-        if isomeros:
-            st.write("Ejemplos de estereoisómeros:", isomeros[:5])
+    if isomeros:
+        st.write("### Ejemplos de estereoisómeros generados:")
+        for s in isomeros[:5]:
+            st.code(s)
 
-            # Crear ZIP en memoria
-            memory_file = BytesIO()
-            with zipfile.ZipFile(memory_file, "w") as zipf:
-                for i, smi in enumerate(isomeros, start=1):
-                    xyz_content, mol = smiles_to_xyz(smi)
-                    if xyz_content:
-                        zipf.writestr(f"mol_{i}.xyz", xyz_content)
+        # Visualización del primero
+        viewer = visualizar_3d(isomeros[0])
+        if viewer:
+            viewer.show()
+            st.components.v1.html(viewer._make_html(), height=350)
 
-                        # Mostrar solo la primera molécula como preview
-                        if i == 1 and mol:
-                            st.subheader("👀 Vista previa 3D del primer isómero")
-                            viewer = mostrar_molecula(mol)
-                            viewer.show()
-                            st.components.v1.html(viewer._make_html(), height=420)
+        # Guardar todos en carpeta y comprimir
+        output_folder = "xyz_files"
+        zip_name = "isomeros_xyz.zip"
+        os.makedirs(output_folder, exist_ok=True)
 
-            memory_file.seek(0)
+        for i, smi in enumerate(isomeros, start=1):
+            out_file = os.path.join(output_folder, f"mol_{i}.xyz")
+            smiles_to_xyz(smi, out_file)
 
-            st.download_button(
-                label="📦 Descargar ZIP con XYZ",
-                data=memory_file,
-                file_name="xyz_results.zip",
-                mime="application/zip"
-            )
+        with zipfile.ZipFile(zip_name, "w") as zipf:
+            for file in os.listdir(output_folder):
+                zipf.write(os.path.join(output_folder, file), file)
+
+        with open(zip_name, "rb") as f:
+            st.download_button("📥 Descargar ZIP con todos los .xyz", f, file_name=zip_name)
