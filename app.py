@@ -180,38 +180,33 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    # Header con logo
-    header_col1, header_col2 = st.columns([1, 4])
+    st.title("🧬 Generador de Estereoisómeros")
+    st.markdown("**Genera todos los estereoisómeros posibles y convierte a formato XYZ**")
     
-    with header_col1:
+    # Sidebar con logo e información
+    with st.sidebar:
+        # Logo en la parte superior del sidebar
         try:
-            # Intentar cargar el logo desde GitHub
-            st.image("imagenes1/logo_inchiral.png", width=120)
+            st.image("imagenes1/logo_inchiral.png", width=200)
         except:
-            # Si no se encuentra la imagen, mostrar texto alternativo
             st.markdown("**🧬 Inchiral**")
-    
-    with header_col2:
-        st.title("🧬 Generador de Estereoisómeros")
-        st.markdown("**Genera todos los estereoisómeros posibles y convierte a formato XYZ**")
-    
-    st.markdown("---")
-    
-    # Sidebar con información
-    st.sidebar.title("ℹ️ Información")
-    st.sidebar.markdown("""
-    **Instrucciones:**
-    1. Ingresa un código SMILES (con o sin quiralidad especificada)
-    2. El sistema detecta automáticamente si la molécula es quiral
-    3. Si tiene centros quirales especificados (@ o @@), genera todos los estereoisómeros
-    4. Máximo 3 centros quirales para evitar demasiados isómeros
-    5. Opcionalmente convierte a formato XYZ para visualización 3D
-    
-    **Ejemplos de SMILES:**
-    - Sin quiralidad: `CC(O)C(N)C` → El sistema detecta si es quiral
-    - Con quiralidad: `C[C@H](O)[C@@H](N)C` → Genera estereoisómeros
-    - Aminoácido: `N[C@@H](C)C(=O)O`
-    """)
+        
+        st.markdown("---")  # Separador
+        
+        st.title("ℹ️ Información")
+        st.markdown("""
+        **Instrucciones:**
+        1. Ingresa un código SMILES (con o sin quiralidad especificada)
+        2. El sistema detecta automáticamente si la molécula es quiral
+        3. Si tiene centros quirales especificados (@ o @@), genera todos los estereoisómeros
+        4. Máximo 3 centros quirales para evitar demasiados isómeros
+        5. Opcionalmente convierte a formato XYZ para visualización 3D
+        
+        **Ejemplos de SMILES:**
+        - Sin quiralidad: `CC(O)C(N)C` → El sistema detecta si es quiral
+        - Con quiralidad: `C[C@H](O)[C@@H](N)C` → Genera estereoisómeros
+        - Aminoácido: `N[C@@H](C)C(=O)O`
+        """)
     
     # Input del usuario
     st.subheader("📝 Entrada de Datos")
@@ -371,26 +366,15 @@ def main():
     
     # Footer
     st.markdown("---")
-    
-    # Footer con logo y créditos
-    footer_col1, footer_col2, footer_col3 = st.columns([1, 2, 1])
-    
-    with footer_col1:
-        try:
-            st.image("imagenes1/logo_inchiral.png", width=60)
-        except:
-            st.markdown("🧬")
-    
-    with footer_col2:
-        st.markdown(
-            """
-            <div style='text-align: center'>
-                <small>🧬 <strong>Inchiral</strong> - Generador de Estereoisómeros<br>
-                Universidad Científica del Sur | Desarrollado con Streamlit y RDKit</small>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    st.markdown(
+        """
+        <div style='text-align: center'>
+            <small>🧬 <strong>Inchiral</strong> - Universidad Científica del Sur<br>
+            Generador de Estereoisómeros | Desarrollado con Streamlit y RDKit</small>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
