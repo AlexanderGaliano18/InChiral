@@ -20,6 +20,51 @@ except ImportError:
     st.info("Instala con: pip install rdkit")
     RDKIT_AVAILABLE = False
 
+def detectar_quiralidad(smiles: str):
+    """
+    Detecta si una molécula tiene centros quirales usando RDKit
+    """
+    if not RDKIT_AVAILABLE:
+        return False, "RDKit no disponible", []
+    
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return False, "SMILES inválido", []
+        
+        # Buscar centros quirales
+        centros = Chem.FindMolChiralCenters(mol, includeUnassigned=True)
+        
+        if len(centros) == 0:
+            return False, "Su molécula no es quiral", []
+        else:
+            return True, f"Su molécula es quiral. Se detectaron {len(centros)} posibles centros", centros
+            
+    except Exception as e:
+        return False, f"Error al analizar la molécula: {str(e)}", []
+
+def analizar_centros_existentes(smiles: str):
+    """
+    Analiza si el SMILES ya tiene centros quirales especificados con @ o @@
+    """
+    centros_especificados = 0
+    i = 0
+    posiciones_at = []
+    
+    while i < len(smiles):
+        if smiles[i] == "@":
+            if i + 1 < len(smiles) and smiles[i+1] == "@":
+                centros_especificados += 1
+                posiciones_at.append(i)
+                i += 2
+            else:
+                centros_especificados += 1
+                posiciones_at.append(i)
+                i += 1
+        else:
+            i += 1
+    
+    return centros_especificados, posiciones_at
 def generar_estereoisomeros(smiles: str):
     """
     Genera todos los estereoisómeros posibles de un SMILES dado
@@ -41,7 +86,7 @@ def generar_estereoisomeros(smiles: str):
     
     # Verificación: aceptar 1, 2 o 3; rechazar > 3
     if n == 0:
-        st.warning("⚠️ El SMILES no tiene centros quirales. No se generarán isómeros.")
+        st.warning("⚠️ El SMILES no tiene centros quirales especificados con @ o @@. No se generarán isómeros.")
         return [], n
     elif n > 3:
         st.error("❌ El SMILES tiene más de 3 centros quirales. No se generarán isómeros.")
@@ -129,26 +174,43 @@ def crear_archivo_zip(archivos_xyz):
 
 def main():
     st.set_page_config(
-        page_title="Generador de Estereoisómeros",
+        page_title="Inchiral - Generador de Estereoisómeros",
         page_icon="🧬",
-        layout="wide"
+        layout="wide",
+        initial_sidebar_state="expanded"
     )
     
-    st.title("🧬 Generador de Estereoisómeros")
-    st.markdown("**Genera todos los estereoisómeros posibles y convierte a formato XYZ**")
+    # Header con logo
+    header_col1, header_col2 = st.columns([1, 4])
+    
+    with header_col1:
+        try:
+            # Intentar cargar el logo desde GitHub
+            st.image("imagenes1/logo_inchiral.png", width=120)
+        except:
+            # Si no se encuentra la imagen, mostrar texto alternativo
+            st.markdown("**🧬 Inchiral**")
+    
+    with header_col2:
+        st.title("🧬 Generador de Estereoisómeros")
+        st.markdown("**Genera todos los estereoisómeros posibles y convierte a formato XYZ**")
+    
+    st.markdown("---")
     
     # Sidebar con información
     st.sidebar.title("ℹ️ Información")
     st.sidebar.markdown("""
     **Instrucciones:**
-    1. Ingresa un código SMILES con centros quirales (@)
-    2. El sistema acepta máximo 3 centros quirales
-    3. Genera automáticamente todos los estereoisómeros
-    4. Opcionalmente convierte a formato XYZ para visualización 3D
+    1. Ingresa un código SMILES (con o sin quiralidad especificada)
+    2. El sistema detecta automáticamente si la molécula es quiral
+    3. Si tiene centros quirales especificados (@ o @@), genera todos los estereoisómeros
+    4. Máximo 3 centros quirales para evitar demasiados isómeros
+    5. Opcionalmente convierte a formato XYZ para visualización 3D
     
-    **Ejemplo de SMILES:**
-    - `C[C@H](O)[C@@H](N)C`
-    - `N[C@@H](C)C(=O)O`
+    **Ejemplos de SMILES:**
+    - Sin quiralidad: `CC(O)C(N)C` → El sistema detecta si es quiral
+    - Con quiralidad: `C[C@H](O)[C@@H](N)C` → Genera estereoisómeros
+    - Aminoácido: `N[C@@H](C)C(=O)O`
     """)
     
     # Input del usuario
@@ -156,16 +218,61 @@ def main():
     smiles_input = st.text_input(
         "👉 Ingresa el código SMILES:",
         placeholder="Ejemplo: C[C@H](O)[C@@H](N)C",
-        help="Ingresa un código SMILES que contenga centros quirales marcados con @ o @@"
+        help="Ingresa un código SMILES. Si no tiene @ o @@, te ayudaremos a detectar si es quiral"
     )
     
     if smiles_input:
-        # Generar estereoisómeros
-        with st.spinner("🔄 Generando estereoisómeros..."):
-            isomeros, n_centros = generar_estereoisomeros(smiles_input)
+        # Primero, analizar el SMILES ingresado
+        st.subheader("🔍 Análisis de Quiralidad")
         
+        # Detectar quiralidad con RDKit
+        es_quiral, mensaje_quiralidad, centros_detectados = detectar_quiralidad(smiles_input)
+        centros_especificados, posiciones_at = analizar_centros_existentes(smiles_input)
+        
+        # Mostrar análisis en columnas
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.info(f"**🔎 Análisis con RDKit:**")
+            if RDKIT_AVAILABLE:
+                if es_quiral:
+                    st.success(f"✅ {mensaje_quiralidad}")
+                    if centros_detectados:
+                        st.write("**Centros detectados:**")
+                        for i, (idx, tipo) in enumerate(centros_detectados):
+                            st.write(f"• Átomo {idx}: {tipo}")
+                else:
+                    if "inválido" in mensaje_quiralidad:
+                        st.error(f"❌ {mensaje_quiralidad}")
+                    else:
+                        st.warning(f"⚠️ {mensaje_quiralidad}")
+            else:
+                st.warning("⚠️ RDKit no disponible para análisis")
+        
+        with col2:
+            st.info(f"**📋 Centros especificados en SMILES:**")
+            if centros_especificados > 0:
+                st.success(f"✅ {centros_especificados} centros con @ o @@ especificados")
+                st.write("**Posiciones encontradas:**")
+                for pos in posiciones_at:
+                    st.write(f"• Posición {pos}")
+            else:
+                st.warning("⚠️ No hay centros especificados con @ o @@")
+        
+        # Recomendaciones
+        if RDKIT_AVAILABLE and es_quiral and centros_especificados == 0:
+            st.info("""
+            💡 **Recomendación:** Tu molécula es quiral pero no tiene centros especificados con @ o @@. 
+            Para generar estereoisómeros, necesitas especificar la quiralidad en el SMILES.
+            
+            **Ejemplo:** Si tu SMILES es `CC(O)C(N)C`, especifica como `C[C@H](O)[C@@H](N)C`
+            """)
+        
+        # Generar estereoisómeros solo si hay centros especificados
+        if centros_especificados > 0:
+            with st.spinner("🔄 Generando estereoisómeros..."):
+                isomeros, n_centros = generar_estereoisomeros(smiles_input)
         if isomeros:
-            st.success(f"🔎 Se encontraron {n_centros} centros quirales (@)")
             st.success(f"✅ Total estereoisómeros generados: {len(isomeros)}")
             
             # Mostrar isómeros en columnas
@@ -199,6 +306,8 @@ def main():
                 # Preview del contenido
                 with st.expander("👀 Vista previa del archivo SMI"):
                     st.text(smi_content)
+        else:
+            st.info("💡 Ingresa un SMILES con centros quirales especificados (@ o @@) para generar estereoisómeros")
             
             with tab3:
                 st.markdown("**🧪 Conversión a formato XYZ**")
@@ -262,14 +371,26 @@ def main():
     
     # Footer
     st.markdown("---")
-    st.markdown(
-        """
-        <div style='text-align: center'>
-            <small>🧬 Generador de Estereoisómeros | Desarrollado con Streamlit y RDKit</small>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    
+    # Footer con logo y créditos
+    footer_col1, footer_col2, footer_col3 = st.columns([1, 2, 1])
+    
+    with footer_col1:
+        try:
+            st.image("imagenes1/logo_inchiral.png", width=60)
+        except:
+            st.markdown("🧬")
+    
+    with footer_col2:
+        st.markdown(
+            """
+            <div style='text-align: center'>
+                <small>🧬 <strong>Inchiral</strong> - Generador de Estereoisómeros<br>
+                Universidad Científica del Sur | Desarrollado con Streamlit y RDKit</small>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 if __name__ == "__main__":
     main()
