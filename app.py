@@ -187,7 +187,7 @@ def main():
     with st.sidebar:
         # Logo en la parte superior del sidebar
         try:
-            st.image("imagenes1/logo_inchiral.png", width=200)
+            st.image("imagenes1/inchiral final.png", width=200)
         except:
             st.markdown("**🧬 Inchiral**")
         
