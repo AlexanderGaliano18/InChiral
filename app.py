@@ -187,7 +187,7 @@ def main():
     with st.sidebar:
         # Logo en la parte superior del sidebar
         try:
-            st.image("imagenes1/inchiral final.png", width=200)
+            st.image("imagenes1/logo_inchiral.png", width=200)
         except:
             st.markdown("**🧬 Inchiral**")
         
@@ -203,7 +203,8 @@ def main():
         5. Opcionalmente convierte a formato XYZ para visualización 3D
         
         **Ejemplos de SMILES:**
-        - Sin quiralidad: `CC(O)C(N)C` → El sistema detecta si es quiral
+        - Sin quiralidad: `CCO` → Molécula simple sin centros quirales
+        - Molécula quiral: `CC(O)C(N)C` → El sistema detecta quiralidad
         - Con quiralidad: `C[C@H](O)[C@@H](N)C` → Genera estereoisómeros
         - Aminoácido: `N[C@@H](C)C(=O)O`
         """)
@@ -234,8 +235,13 @@ def main():
                     st.success(f"✅ {mensaje_quiralidad}")
                     if centros_detectados:
                         st.write("**Centros detectados:**")
-                        for i, (idx, tipo) in enumerate(centros_detectados):
-                            st.write(f"• Átomo {idx}: {tipo}")
+                        for i, (idx, chirality) in enumerate(centros_detectados):
+                            # Manejo seguro del tipo de quiralidad
+                            try:
+                                tipo_quiralidad = str(chirality) if chirality else "Sin asignar"
+                            except:
+                                tipo_quiralidad = "Sin asignar"
+                            st.write(f"• Átomo {idx}: {tipo_quiralidad}")
                 else:
                     if "inválido" in mensaje_quiralidad:
                         st.error(f"❌ {mensaje_quiralidad}")
@@ -321,15 +327,19 @@ def main():
                         mensajes_log = []
                         
                         for i, smiles in enumerate(isomeros):
-                            progress = (i + 1) / len(isomeros)
-                            progress_bar.progress(progress)
-                            status_text.text(f"Procesando molécula {i+1}/{len(isomeros)}: {smiles}")
-                            
-                            xyz_content, mensaje = smiles_to_xyz(smiles, i+1)
-                            mensajes_log.append(mensaje)
-                            
-                            if xyz_content:
-                                archivos_xyz[f"mol_{i+1}.xyz"] = xyz_content
+                            try:
+                                progress = (i + 1) / len(isomeros)
+                                progress_bar.progress(progress)
+                                status_text.text(f"Procesando molécula {i+1}/{len(isomeros)}: {smiles}")
+                                
+                                xyz_content, mensaje = smiles_to_xyz(smiles, i+1)
+                                mensajes_log.append(mensaje)
+                                
+                                if xyz_content:
+                                    archivos_xyz[f"mol_{i+1}.xyz"] = xyz_content
+                            except Exception as e:
+                                error_msg = f"❌ Error procesando molécula {i+1}: {str(e)}"
+                                mensajes_log.append(error_msg)
                         
                         progress_bar.progress(1.0)
                         status_text.text("✅ Proceso completado!")
@@ -344,23 +354,26 @@ def main():
                         
                         if archivos_xyz:
                             # Crear archivo ZIP
-                            zip_data = crear_archivo_zip(archivos_xyz)
-                            
-                            st.success(f"✅ {len(archivos_xyz)} archivos XYZ generados correctamente")
-                            
-                            st.download_button(
-                                label="📦 Descargar archivos XYZ (ZIP)",
-                                data=zip_data,
-                                file_name="estereoisomeros_xyz.zip",
-                                mime="application/zip",
-                                help="Descarga todos los archivos XYZ comprimidos en un ZIP"
-                            )
-                            
-                            # Mostrar preview de un archivo XYZ
-                            if len(archivos_xyz) > 0:
-                                with st.expander("👀 Vista previa del primer archivo XYZ"):
-                                    primer_archivo = list(archivos_xyz.values())[0]
-                                    st.code(primer_archivo, language=None)
+                            try:
+                                zip_data = crear_archivo_zip(archivos_xyz)
+                                
+                                st.success(f"✅ {len(archivos_xyz)} archivos XYZ generados correctamente")
+                                
+                                st.download_button(
+                                    label="📦 Descargar archivos XYZ (ZIP)",
+                                    data=zip_data,
+                                    file_name="estereoisomeros_xyz.zip",
+                                    mime="application/zip",
+                                    help="Descarga todos los archivos XYZ comprimidos en un ZIP"
+                                )
+                                
+                                # Mostrar preview de un archivo XYZ
+                                if len(archivos_xyz) > 0:
+                                    with st.expander("👀 Vista previa del primer archivo XYZ"):
+                                        primer_archivo = list(archivos_xyz.values())[0]
+                                        st.code(primer_archivo, language=None)
+                            except Exception as e:
+                                st.error(f"❌ Error creando archivo ZIP: {str(e)}")
                         else:
                             st.error("❌ No se pudieron generar archivos XYZ")
     
